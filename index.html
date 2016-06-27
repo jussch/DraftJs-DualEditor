@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Dual Editor States</title>
+    <link rel="stylesheet" href="./css/Draft.css" charset="utf-8">
+  </head>
+  <body>
+    <h1>Basic Example</h1>
+
+    <div id="target"></div>
+
+    <div>
+      <h3>Steps to Reproduce</h3>
+      <ol>
+        <li>Change ReadOnly to true</li>
+        <li>Click the top Editor</li>
+        <li>Click the bottom Editor</li>
+        <li>Type two letters</li>
+      </ol>
+    </div>
+
+    <h1>Use-Case Example</h1>
+    <i>Press Enter to swap between editors.</i>
+
+    <div id="real-target"></div>
+
+    <div>
+      <h3>Steps to Reproduce</h3>
+      <ol>
+        <li>Type in first editor</li>
+        <li>Press enter</li>
+        <li>Type in second edtior</li>
+      </ol>
+    </div>
+
+    <script src='./js/react.js'></script>
+    <script src='./js/react-dom.js'></script>
+    <script src='./js/immutable.min.js'></script>
+    <script src='./js/es6-shim.js'></script>
+    <script src='./js/babel.min.js'></script>
+    <script src='./js/Draft.js'></script>
+    <script type="text/babel">
+      const editorStyle = {
+        margin: 10,
+        border: '1px solid black',
+        padding: 5,
+      };
+
+      const closedEditorStyle = {
+        margin: 10,
+        border: '1px solid black',
+        padding: 5,
+        background: '#ddd',
+      };
+
+      /**
+       * Basic Example
+       */
+      class DualInput extends React.Component {
+        constructor(props) {
+          super(props);
+          this.setHelperState = this.setHelperState.bind(this);
+          this.state = {
+            readOnly: false,
+            editorState: Draft.EditorState.createEmpty(),
+            helperState: Draft.EditorState.createEmpty(),
+          };
+        }
+
+        setHelperState(helperState) {
+          this.setState({
+            helperState,
+            editorState: this.addCoreText(helperState.getCurrentContent().getPlainText('') || ''),
+          });
+        }
+
+        addCoreText(text) {
+          const editorState = this.state.editorState;
+          const editorContent = Draft.Modifier.insertText(
+            editorState.getCurrentContent(),
+            editorState.getSelection(),
+            text,
+            null,
+            null
+          );
+
+          return Draft.EditorState.push(editorState, editorContent, 'insert-characters');
+        }
+
+        render() {
+          return (
+            <div>
+              <div
+                onClick={() => this.refs.core.focus()}
+                style={this.state.readOnly ? closedEditorStyle : editorStyle}
+              >
+                <Draft.Editor
+                  ref="core"
+                  editorState={this.state.editorState}
+                  readOnly={this.state.readOnly}
+                  onChange={(editorState) => this.setState({ editorState })}
+                />
+              </div>
+              <div onClick={() => this.refs.helper.focus()} style={editorStyle}>
+                <Draft.Editor
+                  ref="helper"
+                  editorState={this.state.helperState}
+                  onChange={this.setHelperState}
+                />
+              </div>
+              <button onClick={() => this.setState({ readOnly: !this.state.readOnly })}>
+                ReadOnly: {String(this.state.readOnly)}
+              </button>
+            </div>
+          );
+        }
+      }
+
+      ReactDOM.render(<DualInput />, document.getElementById('target'));
+
+      /**
+       * Real Example
+       */
+      class RealDualInput extends React.Component {
+        constructor(props) {
+          super(props);
+          this.setHelperState = this.setHelperState.bind(this);
+          this.handleKeyCommand = this.handleKeyCommand.bind(this);
+          this.keyBindingFn = this.keyBindingFn.bind(this);
+          this.state = {
+            editingCore: true,
+            editorState: Draft.EditorState.createEmpty(),
+            helperState: Draft.EditorState.createEmpty(),
+          };
+        }
+
+        setHelperState(helperState) {
+          this.setState({
+            helperState,
+            editorState: this.addCoreText(helperState.getCurrentContent().getPlainText('') || ''),
+          });
+        }
+
+        openHelper() {
+          // Cache state to have helper insert as a live preview.
+          this.cachedState = this.state.editorState;
+
+          this.setState({
+            editingCore: !this.state.editingCore,
+            helperState: Draft.EditorState.createEmpty(),
+          }, () => {
+            if (this.state.editingCore) {
+              this.refs.core.focus();
+            } else {
+              this.refs.helper.focus();
+            }
+          });
+        }
+
+        handleKeyCommand(command) {
+          if (command === 'open-helper') {
+            this.openHelper();
+            return true;
+          }
+
+          return  false;
+        }
+
+        keyBindingFn(e) {
+          // Enter Key
+          if (e.keyCode === 13) {
+            e.preventDefault();
+            return 'open-helper';
+          }
+
+          return Draft.getDefaultKeyBinding(e);
+        }
+
+        addCoreText(text) {
+          const editorState = this.cachedState;
+          const editorContent = Draft.Modifier.insertText(
+            editorState.getCurrentContent(),
+            editorState.getSelection(),
+            text,
+            ['ITALIC', 'BOLD'],
+            null
+          );
+
+          return Draft.EditorState.push(editorState, editorContent, 'insert-characters');
+        }
+
+        render() {
+          return (
+            <div>
+              <div
+                onClick={() => this.refs.core.focus()}
+                style={!this.state.editingCore ? closedEditorStyle : editorStyle}
+              >
+                <Draft.Editor
+                  ref="core"
+                  editorState={this.state.editorState}
+                  readOnly={!this.state.editingCore}
+                  onChange={(editorState) => this.setState({ editorState })}
+                  handleKeyCommand={this.handleKeyCommand}
+                  keyBindingFn={this.keyBindingFn}
+                />
+              </div>
+              <div
+                onClick={() => this.refs.helper.focus()} style={editorStyle}
+                style={this.state.editingCore ? closedEditorStyle : editorStyle}
+              >
+                <Draft.Editor
+                  ref="helper"
+                  editorState={this.state.helperState}
+                  readOnly={this.state.editingCore}
+                  onChange={this.setHelperState}
+                  handleKeyCommand={this.handleKeyCommand}
+                  keyBindingFn={this.keyBindingFn}
+                />
+              </div>
+            </div>
+          );
+        }
+      }
+
+
+      ReactDOM.render(<RealDualInput />, document.getElementById('real-target'));
+    </script>
+  </body>
+</html>
